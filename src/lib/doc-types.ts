@@ -146,6 +146,9 @@ export interface DocMeta {
   title: string;
   author: string;
   date: string;
+  // UI prefs persisted with the doc:
+  showHeroSubtitle?: boolean; // show "ساخته‌شده با Pord" line under the title (default: true)
+  showFooterCredit?: boolean; // show "سازنده ارشی/Arshi" footer line (default: true)
 }
 
 export function newId(): string {
@@ -976,6 +979,8 @@ export function serializeDocumentToTxt(meta: DocMeta, blocks: Block[]): string {
   lines.push(`§META title=${(meta.title || "").replace(/\n/g, " ")}`);
   lines.push(`§META author=${(meta.author || "").replace(/\n/g, " ")}`);
   lines.push(`§META date=${(meta.date || "").replace(/\n/g, " ")}`);
+  if (meta.showHeroSubtitle === false) lines.push("§META showHeroSubtitle=false");
+  if (meta.showFooterCredit === false) lines.push("§META showFooterCredit=false");
   lines.push("§BLOCKS");
   for (const b of blocks) {
     lines.push(...serializeBlockToTxt(b));
@@ -1014,6 +1019,8 @@ export function parseTxtToDocument(
         if (k === "title") meta.title = v;
         else if (k === "author") meta.author = v;
         else if (k === "date") meta.date = v;
+        else if (k === "showHeroSubtitle") meta.showHeroSubtitle = v !== "false";
+        else if (k === "showFooterCredit") meta.showFooterCredit = v !== "false";
       }
     }
     i++;

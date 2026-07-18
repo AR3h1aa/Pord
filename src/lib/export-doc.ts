@@ -108,7 +108,8 @@ function renderFootnoteTokens(
 
 function renderBlock(
   b: Block,
-  fnNumberMap: Map<string, number>
+  fnNumberMap: Map<string, number>,
+  ctx?: { tocEntriesHtml?: string }
 ): string {
   const styleAttr = blockStyleAttr(b);
   switch (b.type) {
@@ -187,7 +188,7 @@ function renderBlock(
       return `<a id="${footnoteAnchor(b.id)}" class="fn-anchor" aria-hidden="true"></a>`;
     }
     case "toc": {
-      return renderToc(b, fnNumberMap);
+      return renderToc(b, ctx?.tocEntriesHtml ?? "");
     }
     case "glossary": {
       return renderGlossary(b);
@@ -229,18 +230,12 @@ function renderColumnItem(item: {
   return `<${tag} class="${cls}" style="margin:0 0 6px 0">${esc(item.text)}</${tag}>`;
 }
 
-function renderToc(block: TocBlock, _fnNumberMap: Map<string, number>): string {
-  const entries = collectTocEntries([], {
-    includeH2: block.includeH2,
-    includeH3: block.includeH3,
-    includeSubtitle: block.includeSubtitle,
-  });
-  // Note: we can't access full blocks list here. The caller will inject entries.
-  // For now, render the TOC shell; entries injected via placeholder.
+function renderToc(block: TocBlock, entriesHtml: string): string {
+  const isEmpty = !entriesHtml || entriesHtml.trim() === "";
   return `<div class="doc-toc" data-toc-id="${block.id}"${blockStyleAttr(block)}>
     <h2 class="doc-toc-title">${esc(block.title || "فهرست مطالب")}</h2>
     <div class="doc-toc-entries" data-toc-entries="${block.id}">
-      ${entries.length === 0 ? '<p class="doc-toc-empty">برای ساخت فهرست، عنوان‌های h2 یا h3 به سند اضافه کنید.</p>' : ""}
+      ${isEmpty ? '<p class="doc-toc-empty">برای ساخت فهرست، عنوان‌های h2 یا h3 به سند اضافه کنید.</p>' : entriesHtml}
     </div>
   </div>`;
 }
@@ -251,7 +246,7 @@ function renderTocEntries(
   blocks: Block[],
   tocBlock: TocBlock
 ): string {
-  const entries = [];
+  const entries: string[] = [];
   let i = 0;
   while (i < blocks.length) {
     const b = blocks[i];
@@ -741,6 +736,14 @@ html, body {
   color: #94a3b8;
   text-align: center;
 }
+.footer .footer-line { margin: 0; }
+.footer .footer-credit {
+  margin-top: 6px;
+  font-size: 11px;
+  color: #64748b;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
 
 /* A4 page rules — page size and page numbers in footer */
 @page {
@@ -772,6 +775,7 @@ function buildBody(meta: DocMeta, blocks: Block[]): string {
     fnNumberMap.set(fn.id, idx + 1);
   });
 
+  const showHeroSubtitle = meta.showHeroSubtitle !== false;
   const hero = `
     <header class="hero">
       <div class="hero-meta-row">
@@ -779,24 +783,16 @@ function buildBody(meta: DocMeta, blocks: Block[]): string {
         ${meta.date ? `<span class="hero-pill">تاریخ: ${esc(faDigit(formatFaDate(meta.date)))}</span>` : ""}
       </div>
       <h1 class="hero-title">${esc(meta.title || "سند بدون عنوان")}</h1>
-      <p class="hero-sub">سند ساخته‌شده با ویرایشگر سایت</p>
+      ${showHeroSubtitle ? `<p class="hero-sub">ساخته‌شده با Pord — ویرایشگر سند فارسی</p>` : ""}
     </header>
   `.trim();
 
-  // Render each block; for TOC blocks, inject the actual entries.
+  // Render each block; for TOC blocks, pass the precomputed entries HTML.
   const contentHtml = blocks
     .map((b) => {
       if (b.type === "toc") {
-        const inner = renderBlock(b, fnNumberMap);
-        // Inject TOC entries into the placeholder div
         const entriesHtml = renderTocEntries(blocks, b);
-        return inner.replace(
-          `<div class="doc-toc-entries" data-toc-entries="${b.id}">
-      </div>`,
-          `<div class="doc-toc-entries" data-toc-entries="${b.id}">
-      ${entriesHtml}
-    </div>`
-        );
+        return renderBlock(b, fnNumberMap, { tocEntriesHtml: entriesHtml });
       }
       return renderBlock(b, fnNumberMap);
     })
@@ -822,9 +818,13 @@ function buildBody(meta: DocMeta, blocks: Block[]): string {
       </section>`
     : "";
 
-  const footer = `<footer class="footer">ساخته‌شده با ویرایشگر سند • ${esc(
-    faDigit(formatFaDate(new Date().toISOString().slice(0, 10)))
-  )}</footer>`;
+  const showFooterCredit = meta.showFooterCredit !== false;
+  const footer = `<footer class="footer">
+    <div class="footer-line">ساخته‌شده با Pord • ${esc(
+      faDigit(formatFaDate(new Date().toISOString().slice(0, 10)))
+    )}</div>
+    ${showFooterCredit ? `<div class="footer-credit">سازنده ارشی / Arshi</div>` : ""}
+  </footer>`;
   return `<div class="page">${hero}${content}${footnotesHtml}${footer}</div>`;
 }
 

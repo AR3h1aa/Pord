@@ -3,11 +3,13 @@ import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 
 export const metadata: Metadata = {
-  title: "ویرایشگر سند حرفه‌ای | ساخت PDF و Word با استایل سایت",
+  title: "Pord | ویرایشگر سند فارسی — ساخت PDF و Word",
   description:
-    "ساخت و خروجی گرفتن از اسناد حرفه‌ای PDF و Word با تم و فونت سایت. افزودن و جابجایی بلوک‌ها و عکس‌ها با درگ اند دراپ.",
+    "Pord (Persian Word) — ساخت و خروجی گرفتن از اسناد حرفه‌ای PDF و Word فارسی با تم و فونت سایت. افزودن و جابجایی بلوک‌ها و عکس‌ها با درگ اند دراپ.",
   keywords: [
-    "ویرایشگر سند",
+    "Pord",
+    "Persian Word",
+    "ویرایشگر سند فارسی",
     "PDF",
     "Word",
     "Vazirmatn",

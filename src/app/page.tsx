@@ -50,6 +50,8 @@ import {
   Edit3,
   RefreshCw,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import BlockEditor from "@/components/doc/BlockEditor";
 import {
@@ -107,6 +109,11 @@ export default function Home() {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [pasteHint, setPasteHint] = useState<string | null>(null);
+
+  // ===== Editor pagination =====
+  // Splits the long block list into A4-style pages with prev/next navigation.
+  const BLOCKS_PER_PAGE = 6;
+  const [editorPage, setEditorPage] = useState(0);
   // Periodic autosave (every 60s) — shows a top-left toast with a spin animation
   const [autosavePulse, setAutosavePulse] = useState<"idle" | "saving" | "done">("idle");
   const [autosaveToastVisible, setAutosaveToastVisible] = useState(false);
@@ -128,6 +135,46 @@ export default function Home() {
     useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
+
+  // ===== Pagination derived state =====
+  const totalPages = Math.max(1, Math.ceil(blocks.length / BLOCKS_PER_PAGE));
+  // Clamp current page if blocks shrank (e.g., after deletion).
+  const safePage = Math.min(editorPage, totalPages - 1);
+  const pageStart = safePage * BLOCKS_PER_PAGE;
+  const pageEnd = Math.min(pageStart + BLOCKS_PER_PAGE, blocks.length);
+  const pageBlocks = blocks.slice(pageStart, pageEnd);
+
+  // When blocks count changes, keep editorPage in range.
+  useEffect(() => {
+    if (editorPage > totalPages - 1) setEditorPage(Math.max(0, totalPages - 1));
+  }, [editorPage, totalPages]);
+
+  // Merge BlockEditor's per-page changes back into the full blocks list.
+  function handlePageBlocksChange(newPageBlocks: Block[]) {
+    setBlocks((prev) => {
+      const start = safePage * BLOCKS_PER_PAGE;
+      const next = [...prev];
+      // Overwrite positions [start .. start + newPageBlocks.length) with newPageBlocks.
+      // This preserves reordering within the page (BlockEditor returns blocks in
+      // the order it sees them), and keeps IDs intact so the rest of the document
+      // is untouched.
+      for (let i = 0; i < newPageBlocks.length; i++) {
+        next[start + i] = newPageBlocks[i];
+      }
+      return next;
+    });
+  }
+
+  // When a block is inserted, jump to the page that contains the new block.
+  function insertBlockAndNavigate(type: BlockType, afterId?: string) {
+    const newId = insertBlock(type, afterId);
+    // Compute target page: where the new block lives.
+    const idx = afterId
+      ? blocks.findIndex((b) => b.id === afterId) + 1
+      : blocks.length; // appended at end
+    const targetPage = Math.floor(idx / BLOCKS_PER_PAGE);
+    setEditorPage(Math.min(targetPage, totalPages)); // totalPages was computed before insert; clamp via effect
+  }
 
   useEffect(() => {
     try {
@@ -838,11 +885,14 @@ export default function Home() {
               <FileText size={20} />
             </span>
             <div style={{ display: "flex", flexDirection: "column" }}>
-              <span style={{ fontWeight: 800, color: "#0c1a3b", fontSize: 16 }}>
-                ویرایشگر سند حرفه‌ای
+              <span style={{ fontWeight: 800, color: "#0c1a3b", fontSize: 18, letterSpacing: "0.5px" }}>
+                Pord
+                <span style={{ fontSize: 11, color: "#6366f1", fontWeight: 600, marginInlineStart: 6 }}>
+                  Persian Word
+                </span>
               </span>
               <span style={{ fontSize: 11, color: "#64748b", fontWeight: 500 }}>
-                با استایل و فونت سایت • PDF / Word • A4
+                ویرایشگر سند فارسی • PDF / Word • A4
               </span>
             </div>
           </div>
@@ -1300,6 +1350,38 @@ export default function Home() {
             <span>سند جدید</span>
           </button>
 
+          {/* Toggle hero subtitle */}
+          <button
+            type="button"
+            className="tool-pill ghost"
+            onClick={() => setMeta({ ...meta, showHeroSubtitle: !(meta.showHeroSubtitle !== false) })}
+            title="نمایش یا پنهان کردن زیرعنوان «ساخته‌شده با Pord» در بالای سند"
+            style={{
+              background: (meta.showHeroSubtitle !== false) ? "rgba(29,78,216,0.10)" : "transparent",
+              color: (meta.showHeroSubtitle !== false) ? "#1d4ed8" : "#94a3b8",
+              border: "1px solid " + ((meta.showHeroSubtitle !== false) ? "rgba(29,78,216,0.32)" : "rgba(148,163,184,0.32)"),
+            }}
+          >
+            <Subtitles size={14} />
+            <span>زیرعنوان</span>
+          </button>
+
+          {/* Toggle footer credit */}
+          <button
+            type="button"
+            className="tool-pill ghost"
+            onClick={() => setMeta({ ...meta, showFooterCredit: !(meta.showFooterCredit !== false) })}
+            title="نمایش یا پنهان کردن امضای «سازنده ارشی/Arshi» در فوتر"
+            style={{
+              background: (meta.showFooterCredit !== false) ? "rgba(99,102,241,0.10)" : "transparent",
+              color: (meta.showFooterCredit !== false) ? "#4338ca" : "#94a3b8",
+              border: "1px solid " + ((meta.showFooterCredit !== false) ? "rgba(99,102,241,0.32)" : "rgba(148,163,184,0.32)"),
+            }}
+          >
+            <Bookmark size={14} />
+            <span>امضای فوتر</span>
+          </button>
+
           <button
             type="button"
             className="tool-pill violet"
@@ -1498,6 +1580,81 @@ export default function Home() {
             onPaste={handleEditorPaste}
           >
             <div className="doc-paper-deco" aria-hidden />
+
+            {/* ===== Pagination nav (top) ===== */}
+            {blocks.length > 0 && (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 8,
+                  padding: "8px 14px",
+                  marginBottom: 10,
+                  borderRadius: 10,
+                  background: "linear-gradient(135deg, rgba(99,102,241,0.06), rgba(37,99,235,0.04))",
+                  border: "1px solid rgba(99,102,241,0.18)",
+                  position: "relative",
+                  zIndex: 2,
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => setEditorPage((p) => Math.max(0, p - 1))}
+                  disabled={safePage === 0}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    padding: "6px 12px",
+                    borderRadius: 8,
+                    border: "1px solid rgba(99,102,241,0.32)",
+                    background: safePage === 0 ? "transparent" : "#fff",
+                    color: safePage === 0 ? "#cbd5e1" : "#4338ca",
+                    cursor: safePage === 0 ? "not-allowed" : "pointer",
+                    fontWeight: 600,
+                    fontSize: 12,
+                    fontFamily: "inherit",
+                  }}
+                >
+                  <ChevronRight size={14} />
+                  صفحه قبل
+                </button>
+
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: "#0c1a3b" }}>
+                    صفحه {faDigit(safePage + 1)} از {faDigit(totalPages)}
+                  </span>
+                  <span style={{ fontSize: 11, color: "#64748b" }}>
+                    (بلوک‌های {faDigit(pageStart + 1)} تا {faDigit(pageEnd)} از {faDigit(blocks.length)})
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setEditorPage((p) => Math.min(totalPages - 1, p + 1))}
+                  disabled={safePage >= totalPages - 1}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    padding: "6px 12px",
+                    borderRadius: 8,
+                    border: "1px solid rgba(99,102,241,0.32)",
+                    background: safePage >= totalPages - 1 ? "transparent" : "#fff",
+                    color: safePage >= totalPages - 1 ? "#cbd5e1" : "#4338ca",
+                    cursor: safePage >= totalPages - 1 ? "not-allowed" : "pointer",
+                    fontWeight: 600,
+                    fontSize: 12,
+                    fontFamily: "inherit",
+                  }}
+                >
+                  صفحه بعد
+                  <ChevronLeft size={14} />
+                </button>
+              </div>
+            )}
+
             <div style={{ position: "relative", zIndex: 1 }}>
               {blocks.length === 0 ? (
                 <div className="empty-hint">
@@ -1509,13 +1666,13 @@ export default function Home() {
                   collisionDetection={closestCenter}
                   onDragEnd={handleDragEnd}
                 >
-                  {blocks.map((b, idx) => (
+                  {pageBlocks.map((b, idx) => (
                     <div key={b.id} data-block-idx={idx} />
                   ))}
                   <BlockEditor
-                    blocks={blocks}
-                    onChange={setBlocks}
-                    onInsertAfter={(id, t) => insertBlock(t, id)}
+                    blocks={pageBlocks}
+                    onChange={handlePageBlocksChange}
+                    onInsertAfter={(id, t) => insertBlockAndNavigate(t, id)}
                     onRemove={removeBlock}
                     onDuplicate={duplicateBlock}
                     onMoveUp={moveUp}
@@ -1529,6 +1686,31 @@ export default function Home() {
                     allBlocks={blocks}
                   />
                 </DndContext>
+              )}
+
+              {/* Page-end footer marker — visual cue that we're on a paged view */}
+              {blocks.length > 0 && (
+                <div
+                  style={{
+                    marginTop: 24,
+                    padding: "10px 14px",
+                    borderTop: "2px dashed rgba(99,102,241,0.24)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    fontSize: 11,
+                    color: "#64748b",
+                  }}
+                >
+                  <span>
+                    پایان صفحه {faDigit(safePage + 1)}
+                  </span>
+                  <span>
+                    {safePage < totalPages - 1
+                      ? "برای دیدن ادامه، صفحه بعد را بزنید"
+                      : "این آخرین صفحه است"}
+                  </span>
+                </div>
               )}
             </div>
           </div>
@@ -1566,8 +1748,13 @@ export default function Home() {
           backdropFilter: "blur(8px)",
         }}
       >
-        ساخته‌شده با فونت Vazirmatn و تم سایت — خروجی PDF و Word با حفظ کامل استایل و
-        صفحه‌بندی A4
+        <div>
+          ساخته‌شده با فونت Vazirmatn و تم سایت — خروجی PDF و Word با حفظ کامل استایل و
+          صفحه‌بندی A4
+        </div>
+        <div style={{ marginTop: 6, fontWeight: 600, color: "#4338ca" }}>
+          Pord — Persian Word • سازنده ارشی / Arshi
+        </div>
       </footer>
 
       {/* ===== Save snapshot dialog ===== */}
@@ -1869,6 +2056,8 @@ function PreviewPane({ meta, blocks }: { meta: DocMeta; blocks: Block[] }) {
   );
   const fnNumberMap = new Map<string, number>();
   footnotes.forEach((fn, idx) => fnNumberMap.set(fn.id, idx + 1));
+  const showHeroSubtitle = meta.showHeroSubtitle !== false;
+  const showFooterCredit = meta.showFooterCredit !== false;
 
   return (
     <div className="a4-paper">
@@ -1882,9 +2071,11 @@ function PreviewPane({ meta, blocks }: { meta: DocMeta; blocks: Block[] }) {
           <h1 className="doc-title" style={{ fontSize: 28, marginBottom: 6 }}>
             {meta.title || "سند بدون عنوان"}
           </h1>
-          <p style={{ margin: 0, fontSize: 15, color: "#475569", lineHeight: 1.7 }}>
-            سند ساخته‌شده با ویرایشگر سایت
-          </p>
+          {showHeroSubtitle && (
+            <p style={{ margin: 0, fontSize: 15, color: "#475569", lineHeight: 1.7 }}>
+              ساخته‌شده با Pord — ویرایشگر سند فارسی
+            </p>
+          )}
         </div>
 
         {/* Main content */}
@@ -1915,6 +2106,18 @@ function PreviewPane({ meta, blocks }: { meta: DocMeta; blocks: Block[] }) {
             ))}
           </section>
         )}
+
+        {/* Footer credit */}
+        <div style={{ marginTop: 22, paddingTop: 14, borderTop: "1px dashed rgba(148,163,184,0.32)", textAlign: "center" }}>
+          <div style={{ fontSize: 11.5, color: "#94a3b8" }}>
+            ساخته‌شده با Pord • {faDate(new Date().toISOString().slice(0, 10))}
+          </div>
+          {showFooterCredit && (
+            <div style={{ marginTop: 6, fontSize: 11, color: "#64748b", fontWeight: 600 }}>
+              سازنده ارشی / Arshi
+            </div>
+          )}
+        </div>
 
         <div className="a4-page-number">صفحه {faDigit(1)}</div>
       </div>
